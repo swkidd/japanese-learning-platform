@@ -1,0 +1,335 @@
+{% load bootstrap4 %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocab</title>
+    <style>
+        .box {
+            height: 200px;
+            width: 200px;
+            margin: 5px;
+            position: relative;
+            display: block;
+            padding: .75rem 1.25rem;
+            background-color: #fff;
+            border: 1px solid rgba(0, 0, 0, .125);
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="{% url 'saved' %}">saved words</a>
+    <div class="container m-5">
+        <form id="input-word-form">
+            {% csrf_token %}
+            <input id="text" type="text">
+            <button id="word-submit-button" type="submit" class="btn btn-outline-dark btn-sm">
+                submit
+            </button>
+        </form>
+    </div>
+    <div class="container m-5">
+        <form id="input-text-form">
+            {% csrf_token %}
+            <textarea id="match" class="form-control" rows="3"></textarea>
+            <button id="submit-button" type="submit" class="btn btn-outline-dark btn-sm ">
+                submit
+            </button>
+        </form>
+    </div>
+    <div id="match-result-container" class="my-5 container">
+        <h3>Match Results</h3>
+        <div id="match-result"></div>
+    </div>
+    <div id="article-container" class="my-5 container">
+        <h3 id="article-title"></h3>
+        <p id="article-date" style="font-size: 0.8em;"></p>
+        <div id="article"></div>
+    </div>
+    <!-- <div id="summary-container" class="my-5 container">
+        <h5>Summary</h5>
+        <div id="summary-result" class="list-group">
+        </div>
+    </div> -->
+    <!-- <div id="word-result-container" class="my-5 container">
+        <h5>Most Common Words</h5>
+        <div id="word-result" class="list-group">
+        </div>
+    </div> -->
+    <div id="noun-result-container" class="my-5 container">
+        <h5>Most Common Nouns</h5>
+        <div id="noun-result" class="list-group">
+        </div>
+    </div>
+    <div id="verb-result-container" class="my-5 container">
+        <h5>Most Common Verbs</h5>
+        <div id="verb-result" class="list-group">
+        </div>
+    </div>
+    <div id="adj-result-container" class="my-5 container">
+        <h5>Most Common Adjectives</h5>
+        <div id="adj-result" class="list-group">
+        </div>
+    </div>
+    <div id="ent-result-container" class="my-5 container">
+        <h5>Entities</h5>
+        <div id="ent-result" class="list-group">
+        </div>
+    </div>
+    <script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"
+        integrity="sha256-eGE6blurk5sHj+rmkfsGYeKyZx3M4bG+ZlFyA7Kns7E=" crossorigin="anonymous"></script>
+    <script>
+        const onPageLoad = () => {
+            if (typeof (Storage) !== 'undefined') {
+                const title = sessionStorage.getItem("title")
+                const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
+                const date = new Date(sessionStorage.getItem("date")).toLocaleDateString("ja-JP", dateOptions)
+                const text = sessionStorage.getItem("article")
+                if (text != '') {
+                    $("#article-title").html(title)
+                    $("#article-date").html(date)
+                    $("#article").html(text)
+                    ajax_load('/ajax/get_vocab/', success, { text })
+                }
+            }
+        }
+
+        $("#input-word-form").on('submit', event => {
+            event.preventDefault()
+            $('#word-submit-button').append($('<span>')
+                .attr('id', 'spinner')
+                .attr('role', 'status')
+                .attr('aria-hidden', 'true')
+                .addClass('spinner-border')
+                .addClass('spinner-border-sm'))
+            const word = $('#input-word-form #text').val()
+            ajax_load('/ajax/add_word/', ({ word }) => {
+                console.log(word)
+                $('#word-submit-button #spinner').remove()
+                $('#input-word-form #text').val("")
+            }, { word })
+        })
+
+        $("#input-text-form").on('submit', event => {
+            event.preventDefault()
+            $('#submit-button').append($('<span>')
+                .attr('id', 'spinner')
+                .attr('role', 'status')
+                .attr('aria-hidden', 'true')
+                .addClass('spinner-border')
+                .addClass('spinner-border-sm'))
+            const match = $('#input-text-form #match').val()
+            const text = sessionStorage.getItem('article')
+            ajax_load('/ajax/get_vocab/', success, { text, match, matchRequest: "true" })
+        })
+
+        const boldString = (s, b) => s.replace(RegExp(b, 'g'), `<b>${b}</b>`);
+
+        const createVocabSpan = (word, hira) => {
+            const span = $('<span>')
+            span.hover(() => $(this).css('font-weight', 'bold'), () => $(this).css('font-weight', 'normal'))
+                .on('click', e => {
+                    const div = $('<div>').attr('id', 'vocab-popup')
+                        .css('position', 'absolute')
+                        .css('bottom', 0)
+                        .css('width', '90%')
+                        .css('background-color', 'white')
+                        .css('padding', '10px')
+                        .css('text-align', 'center')
+                        .css('font-weight', 'bold')
+                        .text(`${word}: ${hira}`)
+                    const relatedDiv = $('<div>').attr('id', 'related-popup')
+                        .css('width', '100%')
+                        .css('height', '220px')
+                        .css('background-color', 'white')
+                        .css('padding', '3px')
+                        .css('text-align', 'center')
+                        .css('overflow-y', 'scroll')
+                        .css('font-weight', 'bold')
+                        .addClass('list-group')
+                    const containerDiv = $('<div>').attr('id', 'container-popup')
+                        .css('left', e.pageX - 50).css('top', e.pageY - 250)
+                        .css('position', 'absolute')
+                        .css('background-color', 'white')
+                        .css('padding', '3px')
+                        .css('text-align', 'center')
+                        .css('border', '1px solid black')
+                        .css('border-radius', '5px')
+                        .css('width', '300px')
+                        .css('height', '300px')
+                        .on('click', e => e.stopPropagation())
+                    const button = $('<button>')
+                        .on('click', () => {
+                            ajax_load('/ajax/add_word/', () => { containerDiv.remove() }, { word })
+                        })
+                        .addClass("btn btn-light btn-sm btn-block")
+                        .text('save')
+                    div.append(button)
+                    setTimeout(() => {
+                        $(document.body).one('click', () => containerDiv.remove())
+                    }, 100)
+                    containerDiv.append(relatedDiv)
+                    containerDiv.append('<br/>')
+                    containerDiv.append(div)
+                    span.append(containerDiv)
+                    ajax_load('/ajax/input_text/', ({ similar_words=[] }) => {
+                        similar_words.forEach(w => {
+                            relatedDiv.append($('<div>')
+                                .addClass('list-group-item')
+                                .text(w)
+                            )
+                        })
+                    }, { 'text': word })
+                })
+                // .on('mouseleave', () => {
+                //     $('#container-popup').remove()
+                // })
+                .css('cursor', 'pointer')
+                span
+                .text(word)
+            return span
+        }
+
+        const success = ({ original, hira, full, words, nouns, verbs, adjs, ents, matchResult }) => {
+            // $("#summary-result").html('')
+            // $("#word-result").html('')
+            $("#noun-result").html('')
+            $("#verb-result").html('')
+            $("#adj-result").html('')
+            $("#ent-result").html('')
+            $("#match-result").html('')
+            // $("#summary-result").append($('<div>').html(summary))
+
+            textHtml = $('<div>')
+            hiraDic = JSON.parse(hira)
+            posList = [
+                'NOUN',
+                'COPULA',
+                'VERB',
+                'ADJ',
+                'ADV',
+                'PROPN'
+            ]
+            console.log(full.tokens.map(x => [x.pos, full.text.substring(x.start, x.end)]))
+            for (let t in hiraDic) {
+                // const string = full.text.substring(t.start, t.end)
+                textHtml.append(createVocabSpan(t, hiraDic[t]))
+            }
+            // full.tokens.forEach(t => {
+            //     const string = full.text.substring(t.start, t.end)
+            //     if (posList.includes(t.pos) && string in hiraDic) {
+            //         textHtml.append(createVocabSpan(string, hiraDic[string]))
+            //     } else {
+            //         textHtml.append(document.createTextNode(string))
+            //     }
+            // })
+            $('#article').html(textHtml)
+
+            matchResult.forEach(w => {
+                $("#match-result").append($('<div>').addClass('list-group-item').html(w))
+            })
+            // words.forEach(w => {
+            //     console.log(w)
+            //     $("#word-result").append($('<div>').addClass('list-group-item').html(`${w[0]} : ${w[1]}`))
+            // })
+            nouns.forEach(w => {
+                $("#noun-result").append($('<div>').addClass('list-group-item').html(`${w[0]} : ${w[1]}`))
+            })
+            verbs.forEach(w => {
+                $("#verb-result").append($('<div>').addClass('list-group-item').html(`${w[0]} : ${w[1]}`))
+            })
+            adjs.forEach(w => {
+                $("#adj-result").append($('<div>').addClass('list-group-item').html(`${w[0]} : ${w[1]}`))
+            })
+            ents.forEach(w => {
+                $("#ent-result").append($('<div>').addClass('list-group-item').html(`${w[0]} : ${w[1]}`))
+            })
+            // example_sentences.forEach(({ link, word, sentence }) => {
+            //     sentence = sentence.replace(word, `<span style="font-weight: bold;">${word}</span>`)
+            //     html = `<a style="color: black; text-decoration: none;" href='${link}' target="_blank">${sentence}</a>`
+            //     $("#example-sentences").append($('<div>').addClass('list-group-item').html(html))
+            // })
+            $('#submit-button #spinner').remove()
+        }
+
+        function ajax_load(url, success, data) {
+            $.ajax({
+                url: url,
+                type: "POST",
+                data: data,
+                success: success,
+                error: function (xhr, errmsg, err) {
+                    // $(`#${errorDivId}`).html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: " + errmsg +
+                    //     " <a href='#' class='close'>&times;</a></div>");
+                    // console.log(xhr.status + ": " + xhr.responseText);
+                    $('body').html(xhr.responseText)
+                }
+            });
+        }
+
+        $(function () {
+
+            // This function gets cookie with a given name
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie != '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            var csrftoken = getCookie('csrftoken');
+
+            /*
+            The functions below will create a header with csrftoken
+            */
+
+            function csrfSafeMethod(method) {
+                // these HTTP methods do not require CSRF protection
+                return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+            }
+            function sameOrigin(url) {
+                // test that a given url is a same-origin URL
+                // url could be relative or scheme relative or absolute
+                var host = document.location.host; // host + port
+                var protocol = document.location.protocol;
+                var sr_origin = '//' + host;
+                var origin = protocol + sr_origin;
+                // Allow absolute or scheme relative URLs to same origin
+                return (url == origin || url.slice(0, origin.length + 1) == origin + '/') ||
+                    (url == sr_origin || url.slice(0, sr_origin.length + 1) == sr_origin + '/') ||
+                    // or any other URL that isn't scheme relative or absolute i.e relative.
+                    !(/^(\/\/|http:|https:).*/.test(url));
+            }
+
+            $.ajaxSetup({
+                beforeSend: function (xhr, settings) {
+                    if (!csrfSafeMethod(settings.type) && sameOrigin(settings.url)) {
+                        // Send the token to same-origin, relative URLs only.
+                        // Send the token only if the method warrants CSRF protection
+                        // Using the CSRFToken value acquired earlier
+                        xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    }
+                }
+            });
+
+            // call function defined above (csrf token ready)
+            onPageLoad()
+        });
+    </script>
+</body>
+
+</html>

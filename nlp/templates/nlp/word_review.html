@@ -1,0 +1,133 @@
+{% load bootstrap4 %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saved Words</title>
+</head>
+
+<body>
+    <navbar class="navbar nav">
+        <a class="nav-link" href="{% url 'saved' %}">saved words</a>
+        <a class="nav-link" href="{% url 'text' %}">text input</a>
+        <a class="nav-link" href="{% url 'grammar_game' %}">grammar game</a>
+        <a class="nav-link" href="{% url 'kanji_game' %}">kanji game</a>
+    </navbar>
+    {% for word in object_list %}
+    <div class="flash-card card m-5" style="width: 42rem;">
+        <div class="card-body">
+            <div class="d-flex justify-content-between">
+                <h5 class="card-title card-kanji">{{ word.word }}</h5>
+                <h5 class="card-title card-hira" style="display: none;">{{ word.hira }}</h5>
+                <div>
+                    <button onclick="wordknown(event, {{ word.pk }})" class="btn btn-sm btn-primary badge">わかった</button>
+                    <button onclick="wordokay(event, {{ word.pk }})" class="btn btn-sm btn-success badge">オーケー</button>
+                    <button onclick="worddame(event, {{ word.pk }})" class="btn btn-sm btn-danger badge">ダメ</button>
+                </div>
+
+            </div>
+            <p class="card-text">{{ word.ex_sent }}</p>
+            <!-- <a href="#" class="btn btn-primary">Go somewhere</a> -->
+        </div>
+    </div>
+    {% empty %}
+    <li>No saved words yet.</li>
+    {% endfor %}
+    <script type="text/javascript">
+        const wordokay = (event, pk) => {
+            event.stopPropagation()
+            ajax_load('/update/word/known', () => document.location.reload(), { pk, op: 'okay' })
+        }
+        
+        const worddame = (event, pk) => {
+            event.stopPropagation()
+            ajax_load('/update/word/known', () => document.location.reload(), { pk, op: 'dame' })
+        }
+        
+        const wordknown = (event, pk) => {
+            event.stopPropagation()
+            ajax_load('/update/word/known', () => document.location.reload(), { pk, op: 'known' })
+        }
+
+
+        $('.flash-card').click(function() {
+            $(this).find('.card-kanji').toggle()
+            $(this).find('.card-hira').toggle()
+        })
+
+        function ajax_load(url, success, data = {}) {
+            $.ajax({
+                url: url,
+                type: "POST",
+                data: data,
+                success: success,
+                error: function (xhr, errmsg, err) {
+                    // $(`#${errorDivId}`).html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: " + errmsg +
+                    //     " <a href='#' class='close'>&times;</a></div>");
+                    // console.log(xhr.status + ": " + xhr.responseText);
+                    $('body').html(xhr.responseText)
+                }
+            });
+        }
+
+        $(function () {
+
+            // This function gets cookie with a given name
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie != '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            var csrftoken = getCookie('csrftoken');
+
+            /*
+            The functions below will create a header with csrftoken
+            */
+
+            function csrfSafeMethod(method) {
+                // these HTTP methods do not require CSRF protection
+                return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+            }
+            function sameOrigin(url) {
+                // test that a given url is a same-origin URL
+                // url could be relative or scheme relative or absolute
+                var host = document.location.host; // host + port
+                var protocol = document.location.protocol;
+                var sr_origin = '//' + host;
+                var origin = protocol + sr_origin;
+                // Allow absolute or scheme relative URLs to same origin
+                return (url == origin || url.slice(0, origin.length + 1) == origin + '/') ||
+                    (url == sr_origin || url.slice(0, sr_origin.length + 1) == sr_origin + '/') ||
+                    // or any other URL that isn't scheme relative or absolute i.e relative.
+                    !(/^(\/\/|http:|https:).*/.test(url));
+            }
+
+            $.ajaxSetup({
+                beforeSend: function (xhr, settings) {
+                    if (!csrfSafeMethod(settings.type) && sameOrigin(settings.url)) {
+                        // Send the token to same-origin, relative URLs only.
+                        // Send the token only if the method warrants CSRF protection
+                        // Using the CSRFToken value acquired earlier
+                        xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

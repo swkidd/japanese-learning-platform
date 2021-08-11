@@ -1,0 +1,280 @@
+{% load bootstrap4 %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanji Game</title>
+    <style>
+        .answer-box {
+            width: 10em;
+            min-height: 5em;
+            border: 1px solid black;
+            border-radius: 5px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <navbar class="navbar nav">
+        <a class="nav-link" href="{% url 'saved' %}">saved words</a>
+        <a class="nav-link" href="{% url 'text' %}">text input</a>
+        <a class="nav-link" href="{% url 'grammar_game' %}">grammar game</a>
+        <a class="nav-link" href="{% url 'word_review' %}">word review</a>
+    </navbar>
+    <header class="p-2">drag the kanji to their reading</header>
+    <div id="container" class="my-5 p-5 container d-flex flex-column justify-content-center">
+        <div id="full-article" style="font-size: 1.2em;"></div>
+        <div id="question" class="p-3 d-flex flex-wrap justify-content-center"
+            style="font-size: 1.8em; text-align: center; min-height: 100px;">
+            <div id="sentence"></div>
+        </div>
+        <div id="answer" class="p-3 d-flex flex-row"
+            style="margin-bottom: 20px; text-align: center; min-height: 200px">
+        </div>
+        <div id="example-sentences"></div>
+    </div>
+    <div class="d-flex justify-content-around my-5" style="width: 100%;">
+        <button id="reset-button" onclick="reset()" type="button" class="btn btn-light btn-small m-auto">reset</button>
+        <button id="full-article-button" onclick="showArticle()" class="btn btn-light btn-small m-auto">full
+            article</button>
+        <!-- <button id="solution-button" onclick="showSolution()" type="button"
+                class="btn btn-light btn-small m-auto">solve</button> -->
+    </div>
+    <script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"
+        integrity="sha256-eGE6blurk5sHj+rmkfsGYeKyZx3M4bG+ZlFyA7Kns7E=" crossorigin="anonymous"></script>
+    <script>
+        const onload = () => reset()
+        const onDrop = (hira, kanji) => (event, ui) => {
+            const text = ui.draggable.text()
+            if (kanji.includes(text)) {
+                ui.draggable.remove()
+                $('#' + event.target.id).droppable("option", "disabled", true);
+                if ($('.kanji').length == 0) {
+                    $('#sentence').show()
+                    $('#answer').html('<h3 style="color: green; margin: auto;">GREAT SUCCESS!</h3>')
+                }
+                $('#example-sentences').html('')
+                ajax_load('/ajax/kanji_example/', ({ sentences }) => {
+                    sentences.forEach(s => $('#example-sentences').append($('<h3>').text(s)))
+                    ex_sent = sentences.length > 0 ? sentences[0] : ''
+                    kanji.forEach(k => {
+                        ajax_load('/ajax/add_word/', () => {}, { 'word': k, hira, ex_sent })
+                    })
+                }, { 'kanji': text })
+            }
+        }
+
+        const showArticle = () => {
+            $('#full-article').toggle()
+        }
+
+        const arow = 'あかがさざただなはばぱまやらわ'
+        const irow = 'いしじきぎちぢにひびぴみり'
+        const urow = 'うくぐすずつづぬふぶぷむゆる'
+        const erow = 'えけげせぜてでねへべぺめれ'
+        const orow = 'おこごそぞとどのほぼぽもよろ'
+        const getHiraId = hira => {
+            if (arow.indexOf(hira) > -1) {
+                return 'answer-a'
+            } else if (irow.indexOf(hira) > -1) {
+                return 'answer-i'
+            } else if (urow.indexOf(hira) > -1) {
+                return 'answer-u'
+            } else if (erow.indexOf(hira) > -1) {
+                return 'answer-e'
+            } else if (orow.indexOf(hira) > -1) {
+                return 'answer-o'
+            } else {
+                return ''
+            }
+        }
+        const toHira = {
+            'answer-a': ['あ', '#F8C0E0'],
+            'answer-i': ['い', '#E8D888'],
+            'answer-u': ['う', '#A0D8F8'],
+            'answer-e': ['え', '#A8A8A8'],
+            'answer-o': ['お', '#C8E090'],
+        }
+
+        const makeAnswerDiv = id => {
+            const div = $('<div>')
+                .attr('id', id)
+                .addClass("p-1 m-1 answer-box position-relative list-group")
+            const span = $('<span>')
+                .addClass("badge badge-dark position-sticky")
+                .css('left', 2).css('top', 2)
+                .css('color', toHira[id][1])
+                .css('width', '50')
+                .css('font-size', '1.2em')
+                .text(toHira[id][0])
+            div.append(span)
+            return div
+        }
+
+        const reset = () => {
+            const sentence = $('#sentence')
+            $('#question').html('')
+            sentence.hide()
+            $('#question').append(sentence)
+            $('#full-article').hide()
+            $('#answer').html('')
+
+            const answera = makeAnswerDiv('answer-a')
+            $('#answer').append(answera)
+            const answeri = makeAnswerDiv('answer-i')
+            $('#answer').append(answeri)
+            const answeru = makeAnswerDiv('answer-u')
+            $('#answer').append(answeru)
+            const answere = makeAnswerDiv('answer-e')
+            $('#answer').append(answere)
+            const answero = makeAnswerDiv('answer-o')
+            $('#answer').append(answero)
+
+            ajax_load('/ajax/init_kanji_game/', ({ words, text, article }) => {
+                hira = {}
+                $('#sentence').text(text)
+                $('#full-article').text(article)
+                shuffle(words).forEach(([k, h], i) => {
+                    const color = toHira[getHiraId(h[0])][1]
+                    const span = $('<span>')
+                        .attr('id', `kanji${i}`)
+                        .addClass('m-3 p-10 kanji')
+                        .css('height', '1.5em')
+                        .css('font-weight', 'bold')
+                        .css('border', '1px solid black')
+                        .css('border-radius', '5px')
+                        .css('background-color', 'white')
+                        .css('user-select', 'none')
+                        .css('cursor', 'pointer')
+                        .css('background-color', color)
+                        .text(k)
+                    span.draggable({
+                        containment: '#container',
+                        revert: true,
+                        zIndex: 10,
+                    })
+                    $('#question').append(span)
+
+                    if (!(h in hira)) {
+                        hira[h] = [k]
+                    } else {
+                        hira[h].push(k)
+                    }
+                })
+                shuffle(Object.keys(hira)).forEach((h, i) => {
+                    const color = toHira[getHiraId(h[0])][1]
+                    const span = $('<span>')
+                        .attr('id', `hira${i}`)
+                        .addClass('m-3 p-10 list-group-item')
+                        .css('background-color', 'white')
+                        .css('user-select', 'none')
+                        .css('z-index', '-1')
+                        .css('font-size', '1.1em')
+                        .css('background-color', color)
+                        .text(h)
+                    span.droppable({
+                        drop: onDrop(h, hira[h])
+                    })
+                    $('#' + getHiraId(h[0])).append(span)
+                })
+            })
+        }
+
+        function ajax_load(url, success, data = {}) {
+            $.ajax({
+                url: url,
+                type: "POST",
+                data: data,
+                success: success,
+                error: function (xhr, errmsg, err) {
+                    // $(`#${errorDivId}`).html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: " + errmsg +
+                    //     " <a href='#' class='close'>&times;</a></div>");
+                    // console.log(xhr.status + ": " + xhr.responseText);
+                    $('body').html(xhr.responseText)
+                }
+            });
+        }
+
+        function shuffle(array) {
+            var currentIndex = array.length, temporaryValue, randomIndex;
+
+            // While there remain elements to shuffle...
+            while (0 !== currentIndex) {
+
+                // Pick a remaining element...
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex -= 1;
+
+                // And swap it with the current element.
+                temporaryValue = array[currentIndex];
+                array[currentIndex] = array[randomIndex];
+                array[randomIndex] = temporaryValue;
+            }
+
+            return array;
+        }
+
+        $(function () {
+
+            // This function gets cookie with a given name
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie != '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            var csrftoken = getCookie('csrftoken');
+
+            /*
+            The functions below will create a header with csrftoken
+            */
+
+            function csrfSafeMethod(method) {
+                // these HTTP methods do not require CSRF protection
+                return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+            }
+            function sameOrigin(url) {
+                // test that a given url is a same-origin URL
+                // url could be relative or scheme relative or absolute
+                var host = document.location.host; // host + port
+                var protocol = document.location.protocol;
+                var sr_origin = '//' + host;
+                var origin = protocol + sr_origin;
+                // Allow absolute or scheme relative URLs to same origin
+                return (url == origin || url.slice(0, origin.length + 1) == origin + '/') ||
+                    (url == sr_origin || url.slice(0, sr_origin.length + 1) == sr_origin + '/') ||
+                    // or any other URL that isn't scheme relative or absolute i.e relative.
+                    !(/^(\/\/|http:|https:).*/.test(url));
+            }
+
+            $.ajaxSetup({
+                beforeSend: function (xhr, settings) {
+                    if (!csrfSafeMethod(settings.type) && sameOrigin(settings.url)) {
+                        // Send the token to same-origin, relative URLs only.
+                        // Send the token only if the method warrants CSRF protection
+                        // Using the CSRFToken value acquired earlier
+                        xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    }
+                }
+            });
+
+            onload()
+        });
+    </script>
+</body>
+
+</html>

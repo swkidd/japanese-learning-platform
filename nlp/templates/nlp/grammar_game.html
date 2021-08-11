@@ -1,0 +1,232 @@
+{% load bootstrap4 %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grammar Game</title>
+</head>
+
+<body>
+    <navbar class="navbar nav">
+        <a class="nav-link" href="{% url 'saved' %}">saved words</a>
+        <a class="nav-link" href="{% url 'text' %}">text input</a>
+        <a class="nav-link" href="{% url 'kanji_game' %}">kanji game</a>
+        <a class="nav-link" href="{% url 'word_review' %}">word review</a>
+    </navbar>
+    <header class="p-2">fill in the ○ with the correct particles</header>
+    <div id="container" class="my-5 container d-flex flex-column justify-content-center">
+        <div id="question" class="p-3" style="font-size: 1.5em; text-align: center;"></div>
+        <!-- <form id="input-form">
+            <div class="input-group-append">
+                <textarea rows="5" id="input" class="form-control mx-3"></textarea>
+                <button type="submit" id="input-submit" class="btn btn-light btn-sm">check</button>
+            </div>
+        </form> -->
+        <div id="answer" style="text-align: center; height: 100px; width: 100%;"></div>
+        <div class="d-flex justify-content-around">
+            <button id="reset-button" onclick="reset()" type="button"
+                class="btn btn-light btn-small m-auto">reset</button>
+            <button id="solution-button" onclick="showSolution()" type="button"
+                class="btn btn-light btn-small m-auto">solve</button>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"
+        integrity="sha256-eGE6blurk5sHj+rmkfsGYeKyZx3M4bG+ZlFyA7Kns7E=" crossorigin="anonymous"></script>
+    <script>
+        let current_goal = ""
+
+        const onload = () => reset()
+
+        const onDrop = (part, fill) => (event, ui) => {
+            console.log('enter on drop')
+            const text = ui.draggable.text()
+            if (text == part) {
+                console.log('enter remove span')
+                ui.draggable.remove()
+                $('#' + event.target.id).droppable("option", "disabled", true);
+                $('#' + event.target.id).text(part)
+                let answer = ""
+                $('.question-span').each((_, e) => {
+                    answer += e.innerText
+                })
+                console.log(answer)
+                console.log(current_goal)
+                if (answer == current_goal) {
+                    $('#answer').html('<h3 style="color: green;">GREAT SUCCESS!</h3>')
+                }
+            } else {
+                console.log('enter reset span')
+                event.target.innerText = fill
+                ui.draggable.show()
+            }
+        }
+
+        const reset = () => {
+            $('#input').val('')
+            $('#answer').html('')
+            $('#question').html('')
+            ajax_load('/ajax/init_grammar_game/', ({ goal, question, parts }) => {
+                console.log(goal)
+                console.log(question)
+                console.log(parts)
+                question.forEach(([text, part], i) => {
+                    const span = $('<span>')
+                        .attr('id', `part${i}`)
+                        .addClass(`question-span part${part}`)
+                        .text(text)
+                    if (part != false) {
+                        span.droppable({
+                            drop: onDrop(part, text)
+                        })
+                    }
+                    $('#question').append(span)
+                })
+                current_goal = goal
+                shuffle(parts).forEach((p, i) => {
+                    const span = $('<span>')
+                        .css('margin', '5px')
+                        .css('padding', '2px')
+                        .css('border', '1px solid black')
+                        .css('border-radius', '5px')
+                        .css('background-color', 'white')
+                        .css('user-select', 'none')
+                        .text(p)
+                    span.draggable({
+                        containment: '#container',
+                        revert: true,
+                        zIndex: 100,
+                    })
+                    $('#answer').append(span)
+                })
+            })
+        }
+
+        const showSolution = () => {
+            $('#answer').html('')
+            $('#answer').append(`<h3>${current_goal}</h3>`)
+        }
+
+        $("#input-form").on('submit', e => {
+            e.preventDefault()
+            const input = $('#input').val()
+            $('#answer').html('')
+
+            ajax_load('/ajax/check_win/', ({ result }) => {
+                console.log(result)
+                if (result.length > 0 && result.map(([_, correct]) => correct).every(_ => _)) {
+                    $('#answer').html('<h3 style="color: green;">GREAT SUCCESS!</h3>')
+                } else {
+                    result.forEach(([input, correct]) => {
+                        const color = correct ? 'green' : 'red'
+                        const span = $('<span>')
+                            .css('color', color)
+                            .text(input)
+                        span.draggable({
+                            containment: '#container',
+                            revert: true,
+                            zIndex: 100,
+                        })
+                        console.log(current_goal)
+                        $('#answer').append(span)
+                    })
+                }
+            }, { 'goal': current_goal, input })
+        })
+
+        function ajax_load(url, success, data = {}) {
+            $.ajax({
+                url: url,
+                type: "POST",
+                data: data,
+                success: success,
+                error: function (xhr, errmsg, err) {
+                    // $(`#${errorDivId}`).html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: " + errmsg +
+                    //     " <a href='#' class='close'>&times;</a></div>");
+                    // console.log(xhr.status + ": " + xhr.responseText);
+                    $('body').html(xhr.responseText)
+                }
+            });
+        }
+
+        function shuffle(array) {
+            var currentIndex = array.length, temporaryValue, randomIndex;
+
+            // While there remain elements to shuffle...
+            while (0 !== currentIndex) {
+
+                // Pick a remaining element...
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex -= 1;
+
+                // And swap it with the current element.
+                temporaryValue = array[currentIndex];
+                array[currentIndex] = array[randomIndex];
+                array[randomIndex] = temporaryValue;
+            }
+
+            return array;
+        }
+
+        $(function () {
+
+            // This function gets cookie with a given name
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie != '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            var csrftoken = getCookie('csrftoken');
+
+            /*
+            The functions below will create a header with csrftoken
+            */
+
+            function csrfSafeMethod(method) {
+                // these HTTP methods do not require CSRF protection
+                return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+            }
+            function sameOrigin(url) {
+                // test that a given url is a same-origin URL
+                // url could be relative or scheme relative or absolute
+                var host = document.location.host; // host + port
+                var protocol = document.location.protocol;
+                var sr_origin = '//' + host;
+                var origin = protocol + sr_origin;
+                // Allow absolute or scheme relative URLs to same origin
+                return (url == origin || url.slice(0, origin.length + 1) == origin + '/') ||
+                    (url == sr_origin || url.slice(0, sr_origin.length + 1) == sr_origin + '/') ||
+                    // or any other URL that isn't scheme relative or absolute i.e relative.
+                    !(/^(\/\/|http:|https:).*/.test(url));
+            }
+
+            $.ajaxSetup({
+                beforeSend: function (xhr, settings) {
+                    if (!csrfSafeMethod(settings.type) && sameOrigin(settings.url)) {
+                        // Send the token to same-origin, relative URLs only.
+                        // Send the token only if the method warrants CSRF protection
+                        // Using the CSRFToken value acquired earlier
+                        xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    }
+                }
+            });
+
+            onload()
+        });
+    </script>
+</body>
+
+</html>

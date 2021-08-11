@@ -1,0 +1,226 @@
+{% load bootstrap4 %}
+{% bootstrap_css %}
+{% bootstrap_javascript jquery='full' %}
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Similar Words</title>
+    <style>
+        .box {
+            height: 200px;
+            width: 200px;
+            margin: 5px;
+            position: relative;
+            display: block;
+            padding: .75rem 1.25rem;
+            background-color: #fff;
+            border: 1px solid rgba(0, 0, 0, .125);
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+
+<body>
+    <navbar class="navbar nav">
+        <a class="nav-link" href="{% url 'saved' %}">saved words</a>
+        <a class="nav-link" href="{% url 'text' %}">text input</a>
+        <a class="nav-link" href="{% url 'grammar_game' %}">grammar game</a>
+        <a class="nav-link" href="{% url 'kanji_game' %}">kanji game</a>
+    </navbar>
+    <div class="container m-5">
+        <form id="input-sentence-form">
+            {% csrf_token %}
+            <input id="text" type="text">
+            <button id="submit-button" type="submit" class="btn btn-outline-dark btn-sm">
+                submit
+            </button>
+        </form>
+        <form id="input-match-form">
+            {% csrf_token %}
+            <input id="match" type="text">
+            <button id="match-button" type="submit" class="btn btn-outline-dark btn-sm">
+                match
+            </button>
+        </form>
+    </div>
+    <div id="word-math-container" class="container d-flex justify-content-between">
+        <div id="result" class="list-group"></div>
+        <div>
+            <div class="d-flex justify-content-between">
+                <h6>Add Meaning</h6>
+                <button id="add-clear" type="button" class="btn btn-outline-dark btn-sm">clear</button>
+            </div>
+            <div id="box-add" class="box list-group"></div>
+            <div class="d-flex justify-content-between">
+                <h6>Subtract Meaning</h6>
+                <button id="sub-clear" type="button" class="btn btn-outline-dark btn-sm">clear</button>
+            </div>
+            <div id="box-sub" class="box list-group"></div>
+        </div>
+    </div>
+    <div id="example-sentence-container" class="my-5 container">
+        <h3>Example Sentences</h3>
+        <div id="example-sentences" class="list-group">
+        </div>
+    </div>
+    <script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"
+        integrity="sha256-eGE6blurk5sHj+rmkfsGYeKyZx3M4bG+ZlFyA7Kns7E=" crossorigin="anonymous"></script>
+    <script>
+
+        const onDrop = id => (event, ui) => {
+            const text = ui.draggable.text()
+            $(id).append($('<div>').addClass('list-group-item').html(text))
+            const addWords = [...$('#box-add .list-group-item')].map(e => e.innerText)
+            const subWords = [...$('#box-sub .list-group-item')].map(e => e.innerText)
+            ajax_load('/ajax/input_text/', success, { addWords, subWords })
+        }
+
+        const clear = id => () => {
+            $(id).html("")
+            const addWords = [...$('#box-add .list-group-item')].map(e => e.innerText)
+            const subWords = [...$('#box-sub .list-group-item')].map(e => e.innerText)
+            ajax_load('/ajax/input_text/', success, { addWords, subWords })
+        }
+
+        $("#box-add").droppable({
+            drop: onDrop('#box-add')
+        })
+        $("#add-clear").on('click', clear("#box-add"))
+
+        $("#box-sub").droppable({
+            drop: onDrop('#box-sub')
+        })
+        $("#sub-clear").on('click', clear("#box-sub"))
+
+        $("#input-sentence-form").on('submit', event => {
+            event.preventDefault()
+            $('#submit-button').append($('<span>')
+                .attr('id', 'spinner')
+                .attr('role', 'status')
+                .attr('aria-hidden', 'true')
+                .addClass('spinner-border')
+                .addClass('spinner-border-sm'))
+            const text = $('#input-sentence-form #text').val()
+            const match = $('#input-match-form #match').val()
+            const callback = e => {
+                success(e)
+                $('#submit-button #spinner').remove()
+            }
+            ajax_load('/ajax/input_text/', callback, { text, match })
+        })
+
+        $("#input-match-form").on('submit', event => {
+            event.preventDefault()
+            $('#match-button').append($('<span>')
+                .attr('id', 'spinner')
+                .attr('role', 'status')
+                .attr('aria-hidden', 'true')
+                .addClass('spinner-border')
+                .addClass('spinner-border-sm'))
+            const match = $('#input-match-form #match').val()
+            const callback = e => {
+                success(e)
+                $('#match-button #spinner').remove()
+            }
+            ajax_load('/ajax/input_match/', callback, { match })
+        })
+
+        const success = ({ similar_words = [], example_sentences }) => {
+            $("#result").html('')
+            $("#example-sentences").html('')
+            similar_words.forEach(w => {
+                $("#result").append($('<div>').addClass('list-group-item').html(w))
+            })
+            example_sentences.forEach(({ title, article, link, word, sentence, date }) => {
+                sentence = sentence.replace(word, `<span style="font-weight: bold;">${word}</span>`)
+                html = `<a style="color: black; text-decoration: none;" href="{% url 'vocab' %}">${sentence}</a>`
+                $("#example-sentences").append($('<div>').addClass('list-group-item').html(html).click(() => {
+                    if (typeof (Storage) !== 'undefined') {
+                        sessionStorage.setItem("title", title)
+                        sessionStorage.setItem("date", date)
+                        sessionStorage.setItem("article", article)
+                    }
+                }))
+            })
+            $('#result .list-group-item').draggable({
+                containment: '#word-math-container',
+                revert: true,
+                zIndex: 100,
+            })
+        }
+
+        function ajax_load(url, success, data) {
+            $.ajax({
+                url: url,
+                type: "POST",
+                data: data,
+                success: success,
+                error: function (xhr, errmsg, err) {
+                    // $(`#${errorDivId}`).html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: " + errmsg +
+                    //     " <a href='#' class='close'>&times;</a></div>");
+                    // console.log(xhr.status + ": " + xhr.responseText);
+                    $('body').html(xhr.responseText)
+                }
+            });
+        }
+
+        $(function () {
+            // This function gets cookie with a given name
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie != '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            var csrftoken = getCookie('csrftoken');
+
+            /*
+            The functions below will create a header with csrftoken
+            */
+
+            function csrfSafeMethod(method) {
+                // these HTTP methods do not require CSRF protection
+                return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+            }
+            function sameOrigin(url) {
+                // test that a given url is a same-origin URL
+                // url could be relative or scheme relative or absolute
+                var host = document.location.host; // host + port
+                var protocol = document.location.protocol;
+                var sr_origin = '//' + host;
+                var origin = protocol + sr_origin;
+                // Allow absolute or scheme relative URLs to same origin
+                return (url == origin || url.slice(0, origin.length + 1) == origin + '/') ||
+                    (url == sr_origin || url.slice(0, sr_origin.length + 1) == sr_origin + '/') ||
+                    // or any other URL that isn't scheme relative or absolute i.e relative.
+                    !(/^(\/\/|http:|https:).*/.test(url));
+            }
+
+            $.ajaxSetup({
+                beforeSend: function (xhr, settings) {
+                    if (!csrfSafeMethod(settings.type) && sameOrigin(settings.url)) {
+                        // Send the token to same-origin, relative URLs only.
+                        // Send the token only if the method warrants CSRF protection
+                        // Using the CSRFToken value acquired earlier
+                        xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    }
+                }
+            });
+
+        });
+    </script>
+</body>
+
+</html>
